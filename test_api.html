@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Google Places API</title>
+</head>
+<body>
+    <h1>Google Places API Test</h1>
+    <p>Testing zip code: 28403</p>
+    <div id="result"></div>
+
+    <script>
+        const API_KEY = 'AIzaSyCgoC5_2Ap1P1qJptgZvq8vKaa3JEgBVqc';
+
+        // Test geocoding first
+        fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=28403,USA&components=country:US&key=${API_KEY}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Geocoding response:', data);
+                document.getElementById('result').innerHTML = `
+                    <h2>Geocoding Test:</h2>
+                    <p>Status: ${data.status}</p>
+                    <p>Results: ${JSON.stringify(data, null, 2)}</p>
+                `;
+
+                if (data.status === 'OK' && data.results.length > 0) {
+                    const location = data.results[0].geometry.location;
+                    console.log('Location found:', location);
+
+                    // Test nearby search
+                    fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=5000&type=restaurant&key=${API_KEY}`)
+                        .then(response => response.json())
+                        .then(placesData => {
+                            console.log('Places response:', placesData);
+                            document.getElementById('result').innerHTML += `
+                                <h2>Places Search Test:</h2>
+                                <p>Status: ${placesData.status}</p>
+                                <p>Found ${placesData.results ? placesData.results.length : 0} restaurants</p>
+                                <p>Error: ${placesData.error_message || 'None'}</p>
+                            `;
+                        })
+                        .catch(error => {
+                            console.error('Places API error:', error);
+                            document.getElementById('result').innerHTML += `
+                                <h2>Places Search Error:</h2>
+                                <p>${error.message}</p>
+                            `;
+                        });
+                } else {
+                    document.getElementById('result').innerHTML += `
+                        <h2>Geocoding failed!</h2>
+                        <p>Error: ${data.error_message || 'Unknown error'}</p>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Geocoding error:', error);
+                document.getElementById('result').innerHTML = `
+                    <h2>Network Error:</h2>
+                    <p>${error.message}</p>
+                `;
+            });
+    </script>
+</body>
+</html>

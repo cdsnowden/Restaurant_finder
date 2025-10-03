@@ -1,0 +1,199 @@
+import 'dart:math';
+import 'package:flutter/foundation.dart';
+import '../models/restaurant.dart';
+import '../models/search_filters.dart';
+import '../services/places_service.dart';
+
+class RestaurantProvider with ChangeNotifier {
+  final PlacesService _placesService = PlacesService();
+
+  List<Restaurant> _restaurants = [];
+  List<Restaurant> _filteredRestaurants = [];
+  bool _isLoading = false;
+  String? _errorMessage;
+  SearchFilters? _currentFilters;
+
+  List<Restaurant> get restaurants => _filteredRestaurants;
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+  SearchFilters? get currentFilters => _currentFilters;
+  bool get hasResults => _filteredRestaurants.isNotEmpty;
+
+  Future<void> searchRestaurants(SearchFilters filters) async {
+    try {
+      _setLoading(true);
+      _clearError();
+      _currentFilters = filters;
+
+      _restaurants = await _placesService.searchRestaurants(filters);
+      _filteredRestaurants = List.from(_restaurants);
+
+      if (_restaurants.isEmpty) {
+        _setError('No restaurants found for the specified criteria.');
+      }
+    } catch (e) {
+      _setError('Failed to search restaurants: ${e.toString()}');
+      _restaurants = [];
+      _filteredRestaurants = [];
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Restaurant? getRandomRestaurant() {
+    if (_filteredRestaurants.isEmpty) return null;
+
+    final random = Random();
+    final randomIndex = random.nextInt(_filteredRestaurants.length);
+    return _filteredRestaurants[randomIndex];
+  }
+
+  void showRandomRestaurantOnly() {
+    if (_filteredRestaurants.isEmpty) return;
+
+    final randomRestaurant = getRandomRestaurant();
+    if (randomRestaurant != null) {
+      _filteredRestaurants = [randomRestaurant];
+      notifyListeners();
+    }
+  }
+
+  void applyAdditionalFilters({
+    double? minRating,
+    List<String>? cuisineTypes,
+    PriceRange? priceRange,
+    bool? openNowOnly,
+  }) {
+    _filteredRestaurants = _restaurants.where((restaurant) {
+      if (minRating != null && (restaurant.rating ?? 0) < minRating) {
+        return false;
+      }
+
+      if (cuisineTypes != null && cuisineTypes.isNotEmpty) {
+        bool hasCuisineMatch = restaurant.cuisineTypes
+            .any((type) => cuisineTypes.contains(type));
+        if (!hasCuisineMatch) return false;
+      }
+
+      if (priceRange != null && restaurant.priceLevel != null) {
+        int? restaurantPriceLevel = _getPriceLevelNumber(restaurant.priceLevel!);
+        if (restaurantPriceLevel != null) {
+          if (restaurantPriceLevel < priceRange.minLevel ||
+              restaurantPriceLevel > priceRange.maxLevel) {
+            return false;
+          }
+        }
+      }
+
+      if (openNowOnly == true && !restaurant.isOpenNow) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+
+    notifyListeners();
+  }
+
+  int? _getPriceLevelNumber(String priceLevel) {
+    switch (priceLevel) {
+      case 'Free':
+        return 0;
+      case '\$':
+        return 1;
+      case '\$\$':
+        return 2;
+      case '\$\$\$':
+        return 3;
+      case '\$\$\$\$':
+        return 4;
+      default:
+        return null;
+    }
+  }
+
+  void sortRestaurants(RestaurantSortOption sortOption) {
+    switch (sortOption) {
+      case RestaurantSortOption.rating:
+        _filteredRestaurants.sort((a, b) {
+          final aRating = a.rating ?? 0;
+          final bRating = b.rating ?? 0;
+          return bRating.compareTo(aRating);
+        });
+        break;
+      case RestaurantSortOption.name:
+        _filteredRestaurants.sort((a, b) => a.name.compareTo(b.name));
+        break;
+      case RestaurantSortOption.priceAscending:
+        _filteredRestaurants.sort((a, b) {
+          final aPrice = _getPriceLevelNumber(a.priceLevel ?? '\$') ?? 1;
+          final bPrice = _getPriceLevelNumber(b.priceLevel ?? '\$') ?? 1;
+          return aPrice.compareTo(bPrice);
+        });
+        break;
+      case RestaurantSortOption.priceDescending:
+        _filteredRestaurants.sort((a, b) {
+          final aPrice = _getPriceLevelNumber(a.priceLevel ?? '\$') ?? 1;
+          final bPrice = _getPriceLevelNumber(b.priceLevel ?? '\$') ?? 1;
+          return bPrice.compareTo(aPrice);
+        });
+        break;
+    }
+    notifyListeners();
+  }
+
+  Future<Restaurant?> getRestaurantDetails(String placeId) async {
+    try {
+      return await _placesService.getRestaurantDetails(placeId);
+    } catch (e) {
+      print('Error getting restaurant details: $e');
+      return null;
+    }
+  }
+
+  String getPhotoUrl(String photoReference, {int maxWidth = 400}) {
+    return _placesService.getPhotoUrl(photoReference, maxWidth: maxWidth);
+  }
+
+  List<String> getSupportedCuisineTypes() {
+    return _placesService.getSupportedCuisineTypes();
+  }
+
+  String formatCuisineType(String type) {
+    return _placesService.formatCuisineType(type);
+  }
+
+  void clearResults() {
+    _restaurants = [];
+    _filteredRestaurants = [];
+    _currentFilters = null;
+    _clearError();
+    notifyListeners();
+  }
+
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+
+  void _setError(String error) {
+    _errorMessage = error;
+    notifyListeners();
+  }
+
+  void _clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  void clearError() {
+    _clearError();
+  }
+}
+
+enum RestaurantSortOption {
+  rating,
+  name,
+  priceAscending,
+  priceDescending,
+}
