@@ -14,26 +14,95 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _zipCodeController = TextEditingController();
-  SearchFilters _filters = SearchFilters(zipCode: '');
+  final _cityController = TextEditingController();
+  final _stateController = TextEditingController();
+  SearchFilters _filters = SearchFilters();
+  String? _selectedState;
+
+  // List of all U.S. states with abbreviations
+  final List<Map<String, String>> _usStates = [
+    {'name': 'Alabama', 'abbr': 'AL'},
+    {'name': 'Alaska', 'abbr': 'AK'},
+    {'name': 'Arizona', 'abbr': 'AZ'},
+    {'name': 'Arkansas', 'abbr': 'AR'},
+    {'name': 'California', 'abbr': 'CA'},
+    {'name': 'Colorado', 'abbr': 'CO'},
+    {'name': 'Connecticut', 'abbr': 'CT'},
+    {'name': 'Delaware', 'abbr': 'DE'},
+    {'name': 'Florida', 'abbr': 'FL'},
+    {'name': 'Georgia', 'abbr': 'GA'},
+    {'name': 'Hawaii', 'abbr': 'HI'},
+    {'name': 'Idaho', 'abbr': 'ID'},
+    {'name': 'Illinois', 'abbr': 'IL'},
+    {'name': 'Indiana', 'abbr': 'IN'},
+    {'name': 'Iowa', 'abbr': 'IA'},
+    {'name': 'Kansas', 'abbr': 'KS'},
+    {'name': 'Kentucky', 'abbr': 'KY'},
+    {'name': 'Louisiana', 'abbr': 'LA'},
+    {'name': 'Maine', 'abbr': 'ME'},
+    {'name': 'Maryland', 'abbr': 'MD'},
+    {'name': 'Massachusetts', 'abbr': 'MA'},
+    {'name': 'Michigan', 'abbr': 'MI'},
+    {'name': 'Minnesota', 'abbr': 'MN'},
+    {'name': 'Mississippi', 'abbr': 'MS'},
+    {'name': 'Missouri', 'abbr': 'MO'},
+    {'name': 'Montana', 'abbr': 'MT'},
+    {'name': 'Nebraska', 'abbr': 'NE'},
+    {'name': 'Nevada', 'abbr': 'NV'},
+    {'name': 'New Hampshire', 'abbr': 'NH'},
+    {'name': 'New Jersey', 'abbr': 'NJ'},
+    {'name': 'New Mexico', 'abbr': 'NM'},
+    {'name': 'New York', 'abbr': 'NY'},
+    {'name': 'North Carolina', 'abbr': 'NC'},
+    {'name': 'North Dakota', 'abbr': 'ND'},
+    {'name': 'Ohio', 'abbr': 'OH'},
+    {'name': 'Oklahoma', 'abbr': 'OK'},
+    {'name': 'Oregon', 'abbr': 'OR'},
+    {'name': 'Pennsylvania', 'abbr': 'PA'},
+    {'name': 'Rhode Island', 'abbr': 'RI'},
+    {'name': 'South Carolina', 'abbr': 'SC'},
+    {'name': 'South Dakota', 'abbr': 'SD'},
+    {'name': 'Tennessee', 'abbr': 'TN'},
+    {'name': 'Texas', 'abbr': 'TX'},
+    {'name': 'Utah', 'abbr': 'UT'},
+    {'name': 'Vermont', 'abbr': 'VT'},
+    {'name': 'Virginia', 'abbr': 'VA'},
+    {'name': 'Washington', 'abbr': 'WA'},
+    {'name': 'West Virginia', 'abbr': 'WV'},
+    {'name': 'Wisconsin', 'abbr': 'WI'},
+    {'name': 'Wyoming', 'abbr': 'WY'},
+  ];
 
   @override
   void dispose() {
     _zipCodeController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
     super.dispose();
   }
 
   Future<void> _performSearch() async {
-    if (_zipCodeController.text.trim().isEmpty) {
+    final zipCode = _zipCodeController.text.trim();
+    final city = _cityController.text.trim();
+    final state = _selectedState ?? '';
+
+    // Validate that either zip code OR (city AND state) is provided
+    if (zipCode.isEmpty && (city.isEmpty || state.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a zip code'),
+          content: Text('Please enter a zip code OR both city and state'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
         ),
       );
       return;
     }
 
-    final filters = _filters.copyWith(zipCode: _zipCodeController.text.trim());
+    final filters = _filters.copyWith(
+      zipCode: zipCode,
+      city: city,
+      state: state,
+    );
 
     final restaurantProvider = Provider.of<RestaurantProvider>(context, listen: false);
     await restaurantProvider.searchRestaurants(filters);
@@ -83,6 +152,18 @@ class _SearchScreenState extends State<SearchScreen> {
       return;
     }
 
+    final randomRestaurant = restaurantProvider.getRandomRestaurant();
+
+    if (randomRestaurant == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('All restaurants have been removed. Please uncheck some to use this feature.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     restaurantProvider.showRandomRestaurantOnly();
   }
 
@@ -111,6 +192,49 @@ class _SearchScreenState extends State<SearchScreen> {
     return restaurantProvider.formatCuisineType(type);
   }
 
+  Widget _buildResultsArea(BuildContext context, RestaurantProvider provider) {
+    if (provider.isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    if (provider.errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search Error',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              provider.errorMessage!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () {
+                provider.clearError();
+              },
+              child: const Text('Try Again'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const RestaurantListWidget();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -137,6 +261,63 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                     keyboardType: TextInputType.number,
                     onSubmitted: (_) => _performSearch(),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // OR divider
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'OR',
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const Expanded(child: Divider()),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // City Input
+                  TextField(
+                    controller: _cityController,
+                    decoration: const InputDecoration(
+                      labelText: 'City',
+                      hintText: 'Enter city name',
+                      prefixIcon: Icon(Icons.location_city),
+                      border: OutlineInputBorder(),
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                    onSubmitted: (_) => _performSearch(),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // State Dropdown
+                  DropdownButtonFormField<String>(
+                    value: _selectedState,
+                    decoration: const InputDecoration(
+                      labelText: 'State',
+                      hintText: 'Select a state',
+                      prefixIcon: Icon(Icons.map),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _usStates.map((state) {
+                      return DropdownMenuItem<String>(
+                        value: state['abbr'],
+                        child: Text('${state['name']} (${state['abbr']})'),
+                      );
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedState = value;
+                      });
+                    },
+                    isExpanded: true,
                   ),
                   const SizedBox(height: 16),
 
@@ -192,6 +373,25 @@ class _SearchScreenState extends State<SearchScreen> {
                           },
                         ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Minimum Star Rating
+                  Text(
+                    'Minimum Rating: ${_filters.minRating == 0 ? 'Any' : '${_filters.minRating.toStringAsFixed(1)} ★'}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  Slider(
+                    value: _filters.minRating,
+                    min: 0.0,
+                    max: 5.0,
+                    divisions: 10,
+                    label: _filters.minRating == 0 ? 'Any' : '${_filters.minRating.toStringAsFixed(1)} ★',
+                    onChanged: (value) {
+                      setState(() {
+                        _filters = _filters.copyWith(minRating: value);
+                      });
+                    },
                   ),
                   const SizedBox(height: 16),
 
@@ -286,77 +486,18 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          Expanded(
-            child: Consumer<RestaurantProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoading) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
+          Consumer<RestaurantProvider>(
+            builder: (context, provider, child) {
+              // When we have results or are loading, use Expanded to fill remaining space
+              if (provider.hasResults || provider.isLoading || provider.errorMessage != null) {
+                return Expanded(
+                  child: _buildResultsArea(context, provider),
+                );
+              }
 
-                if (provider.errorMessage != null) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Search Error',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          provider.errorMessage!,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: () {
-                            provider.clearError();
-                          },
-                          child: const Text('Try Again'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (!provider.hasResults) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.restaurant_menu,
-                          size: 64,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Find Great Restaurants',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Enter your zip code and search for restaurants near you',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return const RestaurantListWidget();
-              },
-            ),
+              // Empty state - no message, just empty space
+              return const SizedBox.shrink();
+            },
           ),
         ],
       ),

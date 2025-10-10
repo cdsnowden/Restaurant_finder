@@ -12,12 +12,24 @@ class RestaurantProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   SearchFilters? _currentFilters;
+  final Set<String> _removedRestaurantIds = {}; // Track removed restaurants
 
   List<Restaurant> get restaurants => _filteredRestaurants;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   SearchFilters? get currentFilters => _currentFilters;
   bool get hasResults => _filteredRestaurants.isNotEmpty;
+
+  bool isRestaurantRemoved(String placeId) => _removedRestaurantIds.contains(placeId);
+
+  void toggleRestaurantRemoved(String placeId) {
+    if (_removedRestaurantIds.contains(placeId)) {
+      _removedRestaurantIds.remove(placeId);
+    } else {
+      _removedRestaurantIds.add(placeId);
+    }
+    notifyListeners();
+  }
 
   Future<void> searchRestaurants(SearchFilters filters) async {
     try {
@@ -43,9 +55,16 @@ class RestaurantProvider with ChangeNotifier {
   Restaurant? getRandomRestaurant() {
     if (_filteredRestaurants.isEmpty) return null;
 
+    // Filter out removed restaurants
+    final availableRestaurants = _filteredRestaurants
+        .where((r) => !_removedRestaurantIds.contains(r.placeId))
+        .toList();
+
+    if (availableRestaurants.isEmpty) return null;
+
     final random = Random();
-    final randomIndex = random.nextInt(_filteredRestaurants.length);
-    return _filteredRestaurants[randomIndex];
+    final randomIndex = random.nextInt(availableRestaurants.length);
+    return availableRestaurants[randomIndex];
   }
 
   void showRandomRestaurantOnly() {
@@ -167,6 +186,7 @@ class RestaurantProvider with ChangeNotifier {
     _restaurants = [];
     _filteredRestaurants = [];
     _currentFilters = null;
+    _removedRestaurantIds.clear(); // Clear removed restaurants when clearing results
     _clearError();
     notifyListeners();
   }

@@ -5,15 +5,16 @@ import '../models/restaurant.dart';
 import '../models/search_filters.dart';
 
 class PlacesService {
-  static const String _proxyUrl = 'http://localhost:3002/api';
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api/place';
+  static const String _geocodeUrl = 'https://maps.googleapis.com/maps/api/geocode';
   static const String _apiKey = 'AIzaSyCgoC5_2Ap1P1qJptgZvq8vKaa3JEgBVqc'; // Google Places API key
 
   Future<List<Restaurant>> searchRestaurants(SearchFilters filters) async {
     try {
-      final location = await _getLocationFromZipCode(filters.zipCode);
+      // Get location from either zip code or city/state
+      final location = await _getLocation(filters);
       if (location == null) {
-        throw Exception('Could not find location for zip code: ${filters.zipCode}');
+        throw Exception('Could not find location. Please check your search criteria.');
       }
 
       final radiusInMeters = (filters.radiusInMiles * 1609.34).round();
@@ -66,6 +67,13 @@ class PlacesService {
         return distance <= radiusInMeters;
       }).toList();
 
+      // Filter by minimum rating if specified
+      if (filters.minRating > 0) {
+        allRestaurants = allRestaurants.where((restaurant) {
+          return (restaurant.rating ?? 0) >= filters.minRating;
+        }).toList();
+      }
+
       return allRestaurants;
     } catch (e) {
       throw Exception('Failed to search restaurants: $e');
@@ -78,11 +86,11 @@ class PlacesService {
     bool openNow,
     List<int> priceRanges,
   ) async {
-    final url = Uri.parse('$_proxyUrl/places/nearbysearch');
     final params = {
       'location': location,
       'radius': radius.toString(),
       'type': 'restaurant',
+      'key': _apiKey,
     };
 
     if (openNow) {
@@ -94,7 +102,8 @@ class PlacesService {
       params['maxprice'] = priceRanges.reduce((a, b) => a > b ? a : b).toString();
     }
 
-    final response = await http.get(url.replace(queryParameters: params));
+    final url = Uri.parse('$_baseUrl/nearbysearch/json').replace(queryParameters: params);
+    final response = await http.get(url);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -129,11 +138,11 @@ class PlacesService {
     bool openNow,
     List<int> priceRanges,
   ) async {
-    final url = Uri.parse('$_proxyUrl/places/textsearch');
     final params = {
       'query': '$cuisine restaurant',
       'location': location,
       'radius': radius.toString(),
+      'key': _apiKey,
     };
 
     if (openNow) {
@@ -145,7 +154,8 @@ class PlacesService {
       params['maxprice'] = priceRanges.reduce((a, b) => a > b ? a : b).toString();
     }
 
-    final response = await http.get(url.replace(queryParameters: params));
+    final url = Uri.parse('$_baseUrl/textsearch/json').replace(queryParameters: params);
+    final response = await http.get(url);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -175,13 +185,14 @@ class PlacesService {
 
   Future<Restaurant?> getRestaurantDetails(String placeId) async {
     try {
-      final url = Uri.parse('$_proxyUrl/places/details');
       final params = {
         'place_id': placeId,
         'fields': 'place_id,name,formatted_address,rating,price_level,types,formatted_phone_number,website,geometry,photos,opening_hours',
+        'key': _apiKey,
       };
 
-      final response = await http.get(url.replace(queryParameters: params));
+      final url = Uri.parse('$_baseUrl/details/json').replace(queryParameters: params);
+      final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -200,14 +211,67 @@ class PlacesService {
     return '$_baseUrl/photo?maxwidth=$maxWidth&photoreference=$photoReference&key=$_apiKey';
   }
 
-  Future<Map<String, double>?> _getLocationFromZipCode(String zipCode) async {
+  /// Get location from search filters - tries zip code first, then city/state
+  Future<Map<String, double>?> _getLocation(SearchFilters filters) async {
+    // Try zip code first if provided
+    if (filters.zipCode.trim().isNotEmpty) {
+      return await _getLocationFromZipCode(filters.zipCode);
+    }
+
+    // Otherwise try city and state
+    if (filters.city.trim().isNotEmpty && filters.state.trim().isNotEmpty) {
+      return await _getLocationFromCityState(filters.city, filters.state);
+    }
+
+    return null;
+  }
+
+  /// Get location from city and state
+  Future<Map<String, double>?> _getLocationFromCityState(String city, String state) async {
     try {
-      final url = Uri.parse('$_proxyUrl/geocode');
       final params = {
-        'address': '$zipCode, USA',
+        'address': '$city, $state, USA',
+        'components': 'country:US',
+        'key': _apiKey,
       };
 
-      final response = await http.get(url.replace(queryParameters: params));
+      final url = Uri.parse('$_geocodeUrl/json').replace(queryParameters: params);
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        print('Geocoding response status for $city, $state: ${data['status']}');
+
+        if (data['status'] == 'OK' && data['results'].isNotEmpty) {
+          final location = data['results'][0]['geometry']['location'];
+          print('Found location for $city, $state: ${location['lat']}, ${location['lng']}');
+          return {
+            'lat': location['lat'].toDouble(),
+            'lng': location['lng'].toDouble(),
+          };
+        } else {
+          print('Geocoding failed for $city, $state: ${data['status']} - ${data['error_message'] ?? 'No error message'}');
+        }
+      } else {
+        print('HTTP error: ${response.statusCode} - ${response.body}');
+      }
+      return null;
+    } catch (e) {
+      print('Error geocoding city/state: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, double>?> _getLocationFromZipCode(String zipCode) async {
+    try {
+      final params = {
+        'address': '$zipCode, USA',
+        'components': 'country:US',
+        'key': _apiKey,
+      };
+
+      final url = Uri.parse('$_geocodeUrl/json').replace(queryParameters: params);
+      final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

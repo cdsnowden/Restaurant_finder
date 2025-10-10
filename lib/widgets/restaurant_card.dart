@@ -36,20 +36,9 @@ class RestaurantCard extends StatelessWidget {
 
     // Try to launch the URL
     if (websiteUrl != null && websiteUrl.isNotEmpty) {
-      final Uri url = Uri.parse(websiteUrl);
       try {
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        } else {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Could not open website'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
+        final Uri url = Uri.parse(websiteUrl);
+        await launchUrl(url, mode: LaunchMode.externalApplication);
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -127,73 +116,98 @@ class RestaurantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    final provider = Provider.of<RestaurantProvider>(context);
+    final isRemoved = provider.isRestaurantRemoved(restaurant.placeId);
+
+    return Opacity(
+      opacity: isRemoved ? 0.5 : 1.0,
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Remove checkbox
+                    Column(
                       children: [
-                        Text(
-                          restaurant.name,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                        Checkbox(
+                          value: isRemoved,
+                          onChanged: (value) {
+                            provider.toggleRestaurantRemoved(restaurant.placeId);
+                          },
                         ),
-                        const SizedBox(height: 4),
                         Text(
-                          restaurant.address,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          'Remove',
+                          style: TextStyle(
+                            fontSize: 10,
                             color: Colors.grey[600],
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (restaurant.rating != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _getRatingColor(restaurant.rating!),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.star,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                          const SizedBox(width: 2),
                           Text(
-                            restaurant.rating!.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
+                            restaurant.name,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
+                              decoration: isRemoved ? TextDecoration.lineThrough : null,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            restaurant.address,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
                     ),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    if (restaurant.rating != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getRatingColor(restaurant.rating!),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              restaurant.rating!.toStringAsFixed(1),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -253,7 +267,7 @@ class RestaurantCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => _chooseRestaurant(context),
+                      onPressed: isRemoved ? null : () => _chooseRestaurant(context),
                       icon: const Icon(Icons.restaurant, size: 16),
                       label: const Text('Choose This Restaurant'),
                       style: FilledButton.styleFrom(
@@ -275,6 +289,7 @@ class RestaurantCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
       ),
     );
   }

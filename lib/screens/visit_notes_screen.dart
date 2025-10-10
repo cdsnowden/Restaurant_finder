@@ -149,20 +149,9 @@ class _VisitNotesScreenState extends State<VisitNotesScreen> {
 
   Future<void> _openWebsite() async {
     if (widget.restaurant.website != null && widget.restaurant.website!.isNotEmpty) {
-      final Uri url = Uri.parse(widget.restaurant.website!);
       try {
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Could not open website'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
+        final Uri url = Uri.parse(widget.restaurant.website!);
+        await launchUrl(url, mode: LaunchMode.externalApplication);
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
