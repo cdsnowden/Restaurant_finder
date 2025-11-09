@@ -1,6 +1,6 @@
 # Privacy Policy for Restaurant Finder
 
-**Last Updated:** October 3, 2025
+**Last Updated:** October 3, 2024
 
 ## Overview
 Restaurant Finder ("we", "our", or "the app") is committed to protecting your privacy. This Privacy Policy explains how we handle information when you use our mobile application.
@@ -67,8 +67,8 @@ We implement appropriate security measures to protect your data:
 ## Contact Us
 
 If you have any questions about this Privacy Policy, please contact us at:
-- Email: [Your email address]
-- GitHub: [Your GitHub profile or repository URL]
+- Email: chris.s@snowdensjewelers.com
+- GitHub: https://github.com/cdsnowden/Restaurant_finder
 
 ## Consent
 
