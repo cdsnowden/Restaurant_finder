@@ -4,31 +4,49 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 
 class DirectionsService {
-  static const String _baseUrl = 'https://maps.googleapis.com/maps/api/directions';
+  static const String _baseUrl = 'https://routes.googleapis.com/directions/v2:computeRoutes';
   static const String _apiKey = 'AIzaSyCgoC5_2Ap1P1qJptgZvq8vKaa3JEgBVqc'; // Same API key
 
-  /// Get route from origin to destination
+  /// Get route from origin to destination using new Routes API v2
   Future<RouteInfo?> getRoute(
     double originLat,
     double originLng,
     String destination,
   ) async {
     try {
-      final params = {
-        'origin': '$originLat,$originLng',
-        'destination': destination,
-        'key': _apiKey,
+      // Build request body for new Routes API
+      final requestBody = {
+        'origin': {
+          'location': {
+            'latLng': {
+              'latitude': originLat,
+              'longitude': originLng,
+            }
+          }
+        },
+        'destination': {
+          'address': destination,
+        },
+        'travelMode': 'DRIVE',
       };
 
-      final url = Uri.parse('$_baseUrl/json').replace(queryParameters: params);
-      final response = await http.get(url);
+      final url = Uri.parse(_baseUrl);
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': _apiKey,
+          'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs',
+        },
+        body: json.encode(requestBody),
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
-        if (data['status'] == 'OK' && data['routes'].isNotEmpty) {
+        if (data['routes'] != null && data['routes'].isNotEmpty) {
           final route = data['routes'][0];
-          final polylinePoints = route['overview_polyline']['points'] as String;
+          final polylinePoints = route['polyline']['encodedPolyline'] as String;
 
           // Decode polyline to get coordinates
           final PolylinePoints polylinePointsDecoder = PolylinePoints();
@@ -39,9 +57,9 @@ class DirectionsService {
               .map((point) => RoutePoint(lat: point.latitude, lng: point.longitude))
               .toList();
 
-          final leg = route['legs'][0];
-          final distanceMeters = leg['distance']['value'];
-          final durationSeconds = leg['duration']['value'];
+          // Extract distance and duration from route
+          final distanceMeters = route['distanceMeters'] as int;
+          final durationSeconds = int.parse(route['duration'].replaceAll('s', ''));
 
           return RouteInfo(
             points: routePoints,
