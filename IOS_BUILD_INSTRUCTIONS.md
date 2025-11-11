@@ -1,14 +1,17 @@
-# iOS Build Instructions - Fix App Store Rejection
+# iOS Build Instructions - Updated Version
 
-## IMPORTANT: This Build Fixes App Store Rejections
-- 1.5.0 Safety: Developer Information
-- 2.3.3 Performance: Accurate Metadata
-- 2.3.8 Performance: Accurate Metadata
+## What's Included in This Build
 
-## What Was Fixed
-- Added Privacy Policy URL
-- Added Support URL
-- Removed iPad support (iPhone only)
+### App Store Compliance Fixes:
+- ✅ Added Privacy Policy URL
+- ✅ Added Support URL
+- ✅ Removed iPad support (iPhone only)
+- ✅ Fixes App Store rejections: 1.5.0, 2.3.3, 2.3.8
+
+### Functionality Fixes:
+- ✅ Fixed "Get Directions" button (now opens Google Maps properly)
+- ✅ Fixed "Along Route" search (updated to new Routes API v2)
+- ✅ Route search now works with enabled Google Routes API
 
 ---
 
@@ -30,7 +33,7 @@ cd ~/Documents/restaurant_finder
 git pull origin main
 ```
 
-This downloads the fixes I just made.
+**IMPORTANT:** This downloads all the latest fixes including Routes API v2 update.
 
 ## Step 4: Clean Build
 ```bash
@@ -108,10 +111,23 @@ flutter doctor
 ---
 
 ## Current Version
-Version: 1.0.31 (Build 43)
+**Version: 1.0.34 (Build 46)**
+
+Includes:
+- App Store compliance fixes
+- Get Directions button fix
+- Routes API v2 update for route search
 
 ## Privacy Policy Location
 https://github.com/cdsnowden/Restaurant_finder/blob/main/PRIVACY_POLICY.md
 
 ## Support URL
 https://github.com/cdsnowden/Restaurant_finder
+
+---
+
+## Notes for Your Mac Build
+
+Make sure you're building from the **`restaurant_finder`** folder, NOT the old `restaurant_finder_ios` folder.
+
+The `restaurant_finder` folder has all the latest updates (v1.0.34).
