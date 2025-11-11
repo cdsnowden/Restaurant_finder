@@ -130,33 +130,6 @@ class RestaurantProvider with ChangeNotifier {
     }
   }
 
-  Future<void> loadMoreRestaurants() async {
-    if (_nextPageToken == null || _currentFilters == null || _isLoadingMore) {
-      return; // No more results to load or already loading
-    }
-
-    try {
-      _isLoadingMore = true;
-      notifyListeners();
-
-      final result = await _placesService.searchRestaurants(
-        _currentFilters!,
-        pageToken: _nextPageToken,
-      );
-
-      // Append new restaurants to existing list
-      _restaurants.addAll(result.restaurants);
-      _filteredRestaurants = List.from(_restaurants);
-      _nextPageToken = result.nextPageToken;
-
-    } catch (e) {
-      _setError('Failed to load more restaurants: ${e.toString()}');
-    } finally {
-      _isLoadingMore = false;
-      notifyListeners();
-    }
-  }
-
   Restaurant? getRandomRestaurant() {
     if (_filteredRestaurants.isEmpty) return null;
 

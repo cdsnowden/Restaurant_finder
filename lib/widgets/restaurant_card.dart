@@ -62,22 +62,42 @@ class RestaurantCard extends StatelessWidget {
 
   Future<void> _openMaps(BuildContext context) async {
     try {
-      String mapsUrl;
+      Uri url;
 
-      // Use lat/lng if available, otherwise use place ID or address
+      // Use lat/lng if available
       if (restaurant.latitude != null && restaurant.longitude != null) {
-        // Open Google Maps with coordinates and restaurant name
-        mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=${restaurant.latitude},${restaurant.longitude}&destination_place_id=${restaurant.placeId}';
+        // Try Google Maps navigation URL first (works on both Android and iOS)
+        final lat = restaurant.latitude!;
+        final lng = restaurant.longitude!;
+
+        // Use google.navigation for turn-by-turn directions
+        url = Uri.parse('google.navigation:q=$lat,$lng');
+
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url);
+          return;
+        }
+
+        // Fallback to geo: URI (Android)
+        url = Uri.parse('geo:$lat,$lng?q=$lat,$lng(${Uri.encodeComponent(restaurant.name)})');
+
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url);
+          return;
+        }
+
+        // Fallback to https URL
+        url = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng');
       } else if (restaurant.placeId.isNotEmpty) {
-        // Use place ID
-        mapsUrl = 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(restaurant.name)}&query_place_id=${restaurant.placeId}';
+        // Use place ID for web URL
+        final query = Uri.encodeComponent(restaurant.name);
+        url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query&query_place_id=${restaurant.placeId}');
       } else {
         // Fallback to address search
         final query = Uri.encodeComponent('${restaurant.name}, ${restaurant.address}');
-        mapsUrl = 'https://www.google.com/maps/search/?api=1&query=$query';
+        url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$query');
       }
 
-      final Uri url = Uri.parse(mapsUrl);
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (context.mounted) {
