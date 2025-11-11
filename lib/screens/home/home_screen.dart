@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:in_app_update/in_app_update.dart';
 import '../../providers/visits_provider.dart';
 import 'search_screen.dart';
 import '../visits/visits_screen.dart';
@@ -24,7 +25,24 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<VisitsProvider>(context, listen: false).loadUserVisits();
+      _checkForUpdate();
     });
+  }
+
+  // Check for app updates
+  Future<void> _checkForUpdate() async {
+    try {
+      final info = await InAppUpdate.checkForUpdate();
+      if (info.updateAvailability == UpdateAvailability.updateAvailable) {
+        // Show flexible update (user can continue using app while downloading)
+        await InAppUpdate.startFlexibleUpdate();
+        // Once download completes, show install prompt
+        await InAppUpdate.completeFlexibleUpdate();
+      }
+    } catch (e) {
+      // Silently fail if update check fails (e.g., not on Play Store, no internet)
+      debugPrint('Update check failed: $e');
+    }
   }
 
   @override

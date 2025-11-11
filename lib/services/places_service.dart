@@ -4,12 +4,23 @@ import 'package:http/http.dart' as http;
 import '../models/restaurant.dart';
 import '../models/search_filters.dart';
 
+// Search result class to handle pagination
+class SearchResult {
+  final List<Restaurant> restaurants;
+  final String? nextPageToken;
+
+  SearchResult({
+    required this.restaurants,
+    this.nextPageToken,
+  });
+}
+
 class PlacesService {
   static const String _baseUrl = 'https://maps.googleapis.com/maps/api/place';
   static const String _geocodeUrl = 'https://maps.googleapis.com/maps/api/geocode';
   static const String _apiKey = 'AIzaSyCgoC5_2Ap1P1qJptgZvq8vKaa3JEgBVqc'; // Google Places API key
 
-  Future<List<Restaurant>> searchRestaurants(SearchFilters filters) async {
+  Future<SearchResult> searchRestaurants(SearchFilters filters, {String? pageToken}) async {
     try {
       // Get location from either zip code or city/state
       final location = await _getLocation(filters);
@@ -23,18 +34,35 @@ class PlacesService {
       final centerLng = location['lng']!;
 
       List<Restaurant> allRestaurants = [];
+      String? nextPageToken;
 
+      // If restaurant name is provided, search by name
+      if (filters.restaurantName.trim().isNotEmpty) {
+        final result = await _searchByName(
+          filters.restaurantName,
+          locationString,
+          radiusInMeters,
+          filters.openNow,
+          filters.priceRanges,
+          pageToken: pageToken,
+        );
+        allRestaurants = result['restaurants'] as List<Restaurant>;
+        nextPageToken = result['nextPageToken'] as String?;
+      }
       // If cuisine types are selected, use text search for each cuisine
-      if (filters.cuisineTypes.isNotEmpty) {
+      else if (filters.cuisineTypes.isNotEmpty) {
         for (String cuisine in filters.cuisineTypes) {
-          final restaurants = await _searchByCuisine(
+          final result = await _searchByCuisine(
             cuisine,
             locationString,
             radiusInMeters,
             filters.openNow,
             filters.priceRanges,
+            pageToken: pageToken,
           );
-          allRestaurants.addAll(restaurants);
+          allRestaurants.addAll(result['restaurants'] as List<Restaurant>);
+          // Keep the last page token
+          nextPageToken = result['nextPageToken'] as String?;
         }
 
         // Remove duplicates by place_id
@@ -45,12 +73,15 @@ class PlacesService {
         allRestaurants = uniqueRestaurants.values.toList();
       } else {
         // No cuisine filter - use nearby search
-        allRestaurants = await _searchNearby(
+        final result = await _searchNearby(
           locationString,
           radiusInMeters,
           filters.openNow,
           filters.priceRanges,
+          pageToken: pageToken,
         );
+        allRestaurants = result['restaurants'] as List<Restaurant>;
+        nextPageToken = result['nextPageToken'] as String?;
       }
 
       // Filter results by actual distance
@@ -74,17 +105,21 @@ class PlacesService {
         }).toList();
       }
 
-      return allRestaurants;
+      return SearchResult(
+        restaurants: allRestaurants,
+        nextPageToken: nextPageToken,
+      );
     } catch (e) {
       throw Exception('Failed to search restaurants: $e');
     }
   }
 
-  Future<List<Restaurant>> _searchNearby(
+  Future<Map<String, dynamic>> _searchNearby(
     String location,
     int radius,
     bool openNow,
     List<int> priceRanges,
+    {String? pageToken}
   ) async {
     final params = {
       'location': location,
@@ -92,6 +127,10 @@ class PlacesService {
       'type': 'restaurant',
       'key': _apiKey,
     };
+
+    if (pageToken != null) {
+      params['pagetoken'] = pageToken;
+    }
 
     if (openNow) {
       params['opennow'] = 'true';
@@ -109,6 +148,8 @@ class PlacesService {
       final data = json.decode(response.body);
       if (data['status'] == 'OK') {
         final results = data['results'] as List;
+        final nextPageToken = data['next_page_token'] as String?;
+
         List<Restaurant> restaurants = results
             .map((json) => Restaurant.fromJson(json))
             .toList();
@@ -122,7 +163,10 @@ class PlacesService {
           }).toList();
         }
 
-        return restaurants;
+        return {
+          'restaurants': restaurants,
+          'nextPageToken': nextPageToken,
+        };
       } else {
         throw Exception('Places API error: ${data['status']}');
       }
@@ -131,12 +175,13 @@ class PlacesService {
     }
   }
 
-  Future<List<Restaurant>> _searchByCuisine(
+  Future<Map<String, dynamic>> _searchByCuisine(
     String cuisine,
     String location,
     int radius,
     bool openNow,
     List<int> priceRanges,
+    {String? pageToken}
   ) async {
     final params = {
       'query': '$cuisine restaurant',
@@ -144,6 +189,10 @@ class PlacesService {
       'radius': radius.toString(),
       'key': _apiKey,
     };
+
+    if (pageToken != null) {
+      params['pagetoken'] = pageToken;
+    }
 
     if (openNow) {
       params['opennow'] = 'true';
@@ -161,6 +210,8 @@ class PlacesService {
       final data = json.decode(response.body);
       if (data['status'] == 'OK') {
         final results = data['results'] as List;
+        final nextPageToken = data['next_page_token'] as String?;
+
         List<Restaurant> restaurants = results
             .map((json) => Restaurant.fromJson(json))
             .toList();
@@ -174,9 +225,80 @@ class PlacesService {
           }).toList();
         }
 
-        return restaurants;
+        return {
+          'restaurants': restaurants,
+          'nextPageToken': nextPageToken,
+        };
       } else {
-        return []; // Return empty list if no results for this cuisine
+        return {
+          'restaurants': <Restaurant>[],
+          'nextPageToken': null,
+        }; // Return empty result if no results for this cuisine
+      }
+    } else {
+      throw Exception('HTTP error: ${response.statusCode}');
+    }
+  }
+
+  Future<Map<String, dynamic>> _searchByName(
+    String restaurantName,
+    String location,
+    int radius,
+    bool openNow,
+    List<int> priceRanges,
+    {String? pageToken}
+  ) async {
+    final params = {
+      'query': '$restaurantName restaurant',
+      'location': location,
+      'radius': radius.toString(),
+      'key': _apiKey,
+    };
+
+    if (pageToken != null) {
+      params['pagetoken'] = pageToken;
+    }
+
+    if (openNow) {
+      params['opennow'] = 'true';
+    }
+
+    if (priceRanges.isNotEmpty) {
+      params['minprice'] = priceRanges.reduce((a, b) => a < b ? a : b).toString();
+      params['maxprice'] = priceRanges.reduce((a, b) => a > b ? a : b).toString();
+    }
+
+    final url = Uri.parse('$_baseUrl/textsearch/json').replace(queryParameters: params);
+    final response = await http.get(url);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['status'] == 'OK') {
+        final results = data['results'] as List;
+        final nextPageToken = data['next_page_token'] as String?;
+
+        List<Restaurant> restaurants = results
+            .map((json) => Restaurant.fromJson(json))
+            .toList();
+
+        // Filter by price ranges if specific levels are selected
+        if (priceRanges.isNotEmpty) {
+          restaurants = restaurants.where((restaurant) {
+            if (restaurant.priceLevel == null) return false;
+            final restaurantPriceInt = _convertPriceLevelToInt(restaurant.priceLevel!);
+            return restaurantPriceInt != null && priceRanges.contains(restaurantPriceInt);
+          }).toList();
+        }
+
+        return {
+          'restaurants': restaurants,
+          'nextPageToken': nextPageToken,
+        };
+      } else {
+        return {
+          'restaurants': <Restaurant>[],
+          'nextPageToken': null,
+        };
       }
     } else {
       throw Exception('HTTP error: ${response.statusCode}');
@@ -202,7 +324,6 @@ class PlacesService {
       }
       return null;
     } catch (e) {
-      print('Error getting restaurant details: $e');
       return null;
     }
   }
@@ -240,24 +361,17 @@ class PlacesService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('Geocoding response status for $city, $state: ${data['status']}');
 
         if (data['status'] == 'OK' && data['results'].isNotEmpty) {
           final location = data['results'][0]['geometry']['location'];
-          print('Found location for $city, $state: ${location['lat']}, ${location['lng']}');
           return {
             'lat': location['lat'].toDouble(),
             'lng': location['lng'].toDouble(),
           };
-        } else {
-          print('Geocoding failed for $city, $state: ${data['status']} - ${data['error_message'] ?? 'No error message'}');
         }
-      } else {
-        print('HTTP error: ${response.statusCode} - ${response.body}');
       }
       return null;
     } catch (e) {
-      print('Error geocoding city/state: $e');
       return null;
     }
   }
@@ -275,24 +389,17 @@ class PlacesService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        print('Geocoding response status: ${data['status']}');
 
         if (data['status'] == 'OK' && data['results'].isNotEmpty) {
           final location = data['results'][0]['geometry']['location'];
-          print('Found location for $zipCode: ${location['lat']}, ${location['lng']}');
           return {
             'lat': location['lat'].toDouble(),
             'lng': location['lng'].toDouble(),
           };
-        } else {
-          print('Geocoding failed for $zipCode: ${data['status']} - ${data['error_message'] ?? 'No error message'}');
         }
-      } else {
-        print('HTTP error: ${response.statusCode} - ${response.body}');
       }
       return null;
     } catch (e) {
-      print('Error geocoding zip code: $e');
       return null;
     }
   }
@@ -302,6 +409,7 @@ class PlacesService {
       'american_restaurant',
       'bakery',
       'bar',
+      'breakfast_restaurant',
       'cafe',
       'chinese_restaurant',
       'fast_food_restaurant',
@@ -350,8 +458,14 @@ class PlacesService {
     }
   }
 
+  // Public method to get location from filters
+  Future<Map<String, double>?> getLocationFromFilters(SearchFilters filters) async {
+    return await _getLocation(filters);
+  }
+
   // Calculate distance between two coordinates using Haversine formula (returns meters)
-  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+  // Made public so provider can use it for sorting
+  double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
     const double earthRadius = 6371000; // meters
     final double dLat = _toRadians(lat2 - lat1);
     final double dLon = _toRadians(lon2 - lon1);
@@ -362,6 +476,11 @@ class PlacesService {
 
     final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
     return earthRadius * c;
+  }
+
+  // Keep private version for backward compatibility
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    return calculateDistance(lat1, lon1, lat2, lon2);
   }
 
   double _toRadians(double degrees) {

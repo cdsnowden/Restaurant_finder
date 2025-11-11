@@ -2,6 +2,7 @@ class SearchFilters {
   final String zipCode;
   final String city;
   final String state;
+  final String restaurantName; // Search by restaurant name (optional)
   final double radiusInMiles;
   final List<String> cuisineTypes;
   final List<int> priceRanges; // Changed to support multiple price levels
@@ -12,6 +13,7 @@ class SearchFilters {
     this.zipCode = '',
     this.city = '',
     this.state = '',
+    this.restaurantName = '',
     this.radiusInMiles = 5.0,
     this.cuisineTypes = const [],
     this.priceRanges = const [],
@@ -23,6 +25,7 @@ class SearchFilters {
     String? zipCode,
     String? city,
     String? state,
+    String? restaurantName,
     double? radiusInMiles,
     List<String>? cuisineTypes,
     List<int>? priceRanges,
@@ -33,6 +36,7 @@ class SearchFilters {
       zipCode: zipCode ?? this.zipCode,
       city: city ?? this.city,
       state: state ?? this.state,
+      restaurantName: restaurantName ?? this.restaurantName,
       radiusInMiles: radiusInMiles ?? this.radiusInMiles,
       cuisineTypes: cuisineTypes ?? this.cuisineTypes,
       priceRanges: priceRanges ?? this.priceRanges,
@@ -46,6 +50,7 @@ class SearchFilters {
       'zip_code': zipCode,
       'city': city,
       'state': state,
+      'restaurant_name': restaurantName,
       'radius_in_miles': radiusInMiles,
       'cuisine_types': cuisineTypes,
       'price_ranges': priceRanges,
@@ -59,6 +64,7 @@ class SearchFilters {
       zipCode: json['zip_code'] ?? '',
       city: json['city'] ?? '',
       state: json['state'] ?? '',
+      restaurantName: json['restaurant_name'] ?? '',
       radiusInMiles: json['radius_in_miles']?.toDouble() ?? 5.0,
       cuisineTypes: List<String>.from(json['cuisine_types'] ?? []),
       priceRanges: List<int>.from(json['price_ranges'] ?? []),

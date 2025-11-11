@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/restaurant_provider.dart';
 import '../../models/search_filters.dart';
-import '../../widgets/search_filters_widget.dart';
 import '../../widgets/restaurant_list_widget.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -13,6 +12,7 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
+  final _restaurantNameController = TextEditingController();
   final _zipCodeController = TextEditingController();
   final _cityController = TextEditingController();
   final _stateController = TextEditingController();
@@ -75,6 +75,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _restaurantNameController.dispose();
     _zipCodeController.dispose();
     _cityController.dispose();
     _stateController.dispose();
@@ -82,6 +83,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _performSearch() async {
+    final restaurantName = _restaurantNameController.text.trim();
     final zipCode = _zipCodeController.text.trim();
     final city = _cityController.text.trim();
     final state = _selectedState ?? '';
@@ -99,6 +101,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     final filters = _filters.copyWith(
+      restaurantName: restaurantName,
       zipCode: zipCode,
       city: city,
       state: state,
@@ -114,26 +117,91 @@ class _SearchScreenState extends State<SearchScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    } else if (restaurantProvider.hasResults && mounted) {
+      // Show results in a modal
+      _showResultsModal();
     }
   }
 
-  void _onFiltersChanged(SearchFilters filters) {
-    setState(() {
-      _filters = filters;
-    });
-  }
-
-  void _showFiltersDialog() {
+  void _showResultsModal() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: SearchFiltersWidget(
-          filters: _filters,
-          onFiltersChanged: _onFiltersChanged,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Header with drag handle and close button
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Search Results',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                      tooltip: 'Close',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.grey[200],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Drag handle
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // I'm Feeling Lucky button at top
+              Consumer<RestaurantProvider>(
+                builder: (context, provider, child) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: FilledButton.icon(
+                      onPressed: _feelingLucky,
+                      icon: const Icon(Icons.casino, size: 20),
+                      label: const Text('I\'m Feeling Lucky'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              // Results list
+              Expanded(
+                child: Consumer<RestaurantProvider>(
+                  builder: (context, provider, child) {
+                    return const RestaurantListWidget();
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -192,47 +260,13 @@ class _SearchScreenState extends State<SearchScreen> {
     return restaurantProvider.formatCuisineType(type);
   }
 
-  Widget _buildResultsArea(BuildContext context, RestaurantProvider provider) {
-    if (provider.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+  String _getDistanceLabel(double miles) {
+    // Show yards for distances under 0.2 miles (350 yards)
+    if (miles < 0.2) {
+      final yards = (miles * 1760).round();
+      return '$yards yards';
     }
-
-    if (provider.errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Search Error',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              provider.errorMessage!,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () {
-                provider.clearError();
-              },
-              child: const Text('Try Again'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return const RestaurantListWidget();
+    return '${miles.toStringAsFixed(1)} miles';
   }
 
   @override
@@ -244,260 +278,382 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Zip Code Input
-                  TextField(
-                    controller: _zipCodeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Zip Code',
-                      hintText: 'Enter zip code',
-                      prefixIcon: Icon(Icons.location_on),
-                      border: OutlineInputBorder(),
+                  // LOCATION SECTION
+                  Card(
+                    elevation: 4,
+                    shadowColor: Colors.orange.withValues(alpha: 0.3),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.orange.withValues(alpha: 0.3), width: 1),
                     ),
-                    keyboardType: TextInputType.number,
-                    onSubmitted: (_) => _performSearch(),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // OR divider
-                  Row(
-                    children: [
-                      const Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          'OR',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.bold,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16.0),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.orange.shade50, Colors.orange.shade100],
+                            ),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              topRight: Radius.circular(12),
+                            ),
                           ),
-                        ),
-                      ),
-                      const Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // City Input
-                  TextField(
-                    controller: _cityController,
-                    decoration: const InputDecoration(
-                      labelText: 'City',
-                      hintText: 'Enter city name',
-                      prefixIcon: Icon(Icons.location_city),
-                      border: OutlineInputBorder(),
-                    ),
-                    textCapitalization: TextCapitalization.words,
-                    onSubmitted: (_) => _performSearch(),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // State Dropdown
-                  DropdownButtonFormField<String>(
-                    value: _selectedState,
-                    decoration: const InputDecoration(
-                      labelText: 'State',
-                      hintText: 'Select a state',
-                      prefixIcon: Icon(Icons.map),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: _usStates.map((state) {
-                      return DropdownMenuItem<String>(
-                        value: state['abbr'],
-                        child: Text('${state['name']} (${state['abbr']})'),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedState = value;
-                      });
-                    },
-                    isExpanded: true,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Distance Selector
-                  Text(
-                    'Distance: ${_filters.radiusInMiles.toStringAsFixed(1)} miles from center',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Slider(
-                    value: _filters.radiusInMiles,
-                    min: 1.0,
-                    max: 25.0,
-                    divisions: 24,
-                    label: '${_filters.radiusInMiles.toStringAsFixed(1)} miles',
-                    onChanged: (value) {
-                      setState(() {
-                        _filters = _filters.copyWith(radiusInMiles: value);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Price Range Selector (Multiple Selection)
-                  Text(
-                    'Price Range (select multiple)',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (int i = 1; i <= 4; i++)
-                        FilterChip(
-                          label: Row(
-                            mainAxisSize: MainAxisSize.min,
+                          child: Row(
                             children: [
-                              Text('\$' * i),
-                              const SizedBox(width: 4),
-                              Text(_getPriceDescription(i), style: const TextStyle(fontSize: 12)),
+                              Icon(Icons.location_on, color: Colors.orange.shade700, size: 28),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Location',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange.shade900,
+                                ),
+                              ),
                             ],
                           ),
-                          selected: _filters.priceRanges.contains(i),
-                          onSelected: (selected) {
-                            setState(() {
-                              final newPriceRanges = List<int>.from(_filters.priceRanges);
-                              if (selected) {
-                                newPriceRanges.add(i);
-                              } else {
-                                newPriceRanges.remove(i);
-                              }
-                              _filters = _filters.copyWith(priceRanges: newPriceRanges);
-                            });
-                          },
                         ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Restaurant Name Input (Optional)
+                              TextField(
+                                controller: _restaurantNameController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Restaurant Name (Optional)',
+                                  hintText: 'e.g., Sawmill Grill',
+                                  prefixIcon: Icon(Icons.restaurant),
+                                  border: OutlineInputBorder(),
+                                ),
+                                textCapitalization: TextCapitalization.words,
+                                onSubmitted: (_) => _performSearch(),
+                              ),
+                              const SizedBox(height: 16),
 
-                  // Minimum Star Rating
-                  Text(
-                    'Minimum Rating: ${_filters.minRating == 0 ? 'Any' : '${_filters.minRating.toStringAsFixed(1)} ★'}',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Slider(
-                    value: _filters.minRating,
-                    min: 0.0,
-                    max: 5.0,
-                    divisions: 10,
-                    label: _filters.minRating == 0 ? 'Any' : '${_filters.minRating.toStringAsFixed(1)} ★',
-                    onChanged: (value) {
-                      setState(() {
-                        _filters = _filters.copyWith(minRating: value);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
+                              // Zip Code Input
+                              TextField(
+                                controller: _zipCodeController,
+                                decoration: const InputDecoration(
+                                  labelText: 'Zip Code',
+                                  hintText: 'Enter zip code',
+                                  prefixIcon: Icon(Icons.location_on),
+                                  border: OutlineInputBorder(),
+                                ),
+                                keyboardType: TextInputType.number,
+                                onSubmitted: (_) => _performSearch(),
+                              ),
+                              const SizedBox(height: 12),
 
-                  // Open Now Toggle
-                  SwitchListTile(
-                    title: const Text('Show only restaurants open now'),
-                    value: _filters.openNow,
-                    onChanged: (value) {
-                      setState(() {
-                        _filters = _filters.copyWith(openNow: value);
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
+                              // OR divider
+                              Row(
+                                children: [
+                                  const Expanded(child: Divider()),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                                    child: Text(
+                                      'OR',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const Expanded(child: Divider()),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
 
-                  // Cuisine Types
-                  Text(
-                    'Cuisine Types (select multiple)',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 120,
-                    child: ListView(
-                      children: _getAvailableCuisines().map((cuisine) {
-                        final isSelected = _filters.cuisineTypes.contains(cuisine);
-                        return CheckboxListTile(
-                          dense: true,
-                          title: Text(_formatCuisineType(cuisine)),
-                          value: isSelected,
-                          onChanged: (value) {
-                            setState(() {
-                              final newCuisines = List<String>.from(_filters.cuisineTypes);
-                              if (value == true) {
-                                newCuisines.add(cuisine);
-                              } else {
-                                newCuisines.remove(cuisine);
-                              }
-                              _filters = _filters.copyWith(cuisineTypes: newCuisines);
-                            });
-                          },
-                        );
-                      }).toList(),
+                              // City Input
+                              TextField(
+                                controller: _cityController,
+                                decoration: const InputDecoration(
+                                  labelText: 'City',
+                                  hintText: 'Enter city name',
+                                  prefixIcon: Icon(Icons.location_city),
+                                  border: OutlineInputBorder(),
+                                ),
+                                textCapitalization: TextCapitalization.words,
+                                onSubmitted: (_) => _performSearch(),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // State Dropdown
+                              DropdownButtonFormField<String>(
+                                initialValue: _selectedState,
+                                decoration: const InputDecoration(
+                                  labelText: 'State',
+                                  hintText: 'Select a state',
+                                  prefixIcon: Icon(Icons.map),
+                                  border: OutlineInputBorder(),
+                                ),
+                                items: _usStates.map((state) {
+                                  return DropdownMenuItem<String>(
+                                    value: state['abbr'],
+                                    child: Text('${state['name']} (${state['abbr']})'),
+                                  );
+                                }).toList(),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedState = value;
+                                  });
+                                },
+                                isExpanded: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Search Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Consumer<RestaurantProvider>(
-                          builder: (context, provider, child) {
-                            return FilledButton(
-                              onPressed: provider.isLoading ? null : _performSearch,
-                              child: provider.isLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text('Search Restaurants'),
-                            );
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Consumer<RestaurantProvider>(
-                        builder: (context, provider, child) {
-                          return FilledButton.tonal(
-                            onPressed: provider.hasResults ? _feelingLucky : null,
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.casino, size: 18),
-                                SizedBox(width: 4),
-                                Text('I\'m Feeling Lucky'),
-                              ],
+                  // FILTERS SECTION
+                  Card(
+                    elevation: 4,
+                    shadowColor: Colors.blue.withValues(alpha: 0.3),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.blue.withValues(alpha: 0.3), width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16.0),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.blue.shade50, Colors.blue.shade100],
                             ),
-                          );
-                        },
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              topRight: Radius.circular(12),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.tune, color: Colors.blue.shade700, size: 28),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Filters',
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Distance Selector
+                              Text(
+                                'Distance: ${_getDistanceLabel(_filters.radiusInMiles)} from center',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              Slider(
+                                value: _filters.radiusInMiles,
+                                min: 0.06, // 100 yards
+                                max: 25.0,
+                                divisions: 100,
+                                label: _getDistanceLabel(_filters.radiusInMiles),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _filters = _filters.copyWith(radiusInMiles: value);
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Price Range Selector (Multiple Selection)
+                              Text(
+                                'Price Range (select multiple)',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  for (int i = 1; i <= 4; i++)
+                                    FilterChip(
+                                      label: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text('\$' * i),
+                                          const SizedBox(width: 4),
+                                          Text(_getPriceDescription(i), style: const TextStyle(fontSize: 12)),
+                                        ],
+                                      ),
+                                      selected: _filters.priceRanges.contains(i),
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          final newPriceRanges = List<int>.from(_filters.priceRanges);
+                                          if (selected) {
+                                            newPriceRanges.add(i);
+                                          } else {
+                                            newPriceRanges.remove(i);
+                                          }
+                                          _filters = _filters.copyWith(priceRanges: newPriceRanges);
+                                        });
+                                      },
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Minimum Star Rating
+                              Text(
+                                'Minimum Rating: ${_filters.minRating == 0 ? 'Any' : '${_filters.minRating.toStringAsFixed(1)} ★'}',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              Slider(
+                                value: _filters.minRating,
+                                min: 0.0,
+                                max: 5.0,
+                                divisions: 10,
+                                label: _filters.minRating == 0 ? 'Any' : '${_filters.minRating.toStringAsFixed(1)} ★',
+                                onChanged: (value) {
+                                  setState(() {
+                                    _filters = _filters.copyWith(minRating: value);
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Open Now Toggle
+                              SwitchListTile(
+                                title: const Text('Show only restaurants open now'),
+                                value: _filters.openNow,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _filters = _filters.copyWith(openNow: value);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // CUISINE TYPES SECTION
+                  Card(
+                    elevation: 4,
+                    shadowColor: Colors.orange.withValues(alpha: 0.3),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: Colors.orange.withValues(alpha: 0.3), width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16.0),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [Colors.orange.shade50, Colors.orange.shade100],
+                            ),
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                              topRight: Radius.circular(12),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.restaurant_menu, color: Colors.orange.shade700, size: 28),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Cuisine Types',
+                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange.shade900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Select multiple cuisines (optional)',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Colors.orange.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Container(
+                            height: 120,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.orange.shade200, width: 2),
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.orange.shade50.withValues(alpha: 0.3),
+                            ),
+                              child: ListView(
+                                children: _getAvailableCuisines().map((cuisine) {
+                                  final isSelected = _filters.cuisineTypes.contains(cuisine);
+                                  return CheckboxListTile(
+                                    dense: true,
+                                    title: Text(_formatCuisineType(cuisine)),
+                                    value: isSelected,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        final newCuisines = List<String>.from(_filters.cuisineTypes);
+                                        if (value == true) {
+                                          newCuisines.add(cuisine);
+                                        } else {
+                                          newCuisines.remove(cuisine);
+                                        }
+                                        _filters = _filters.copyWith(cuisineTypes: newCuisines);
+                                      });
+                                    },
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  const SizedBox(height: 16),
+
+                  // Search Button
+                  Consumer<RestaurantProvider>(
+                    builder: (context, provider, child) {
+                      return FilledButton(
+                        onPressed: provider.isLoading ? null : _performSearch,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 48),
+                        ),
+                        child: provider.isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Search Restaurants'),
+                      );
+                    },
                   ),
                 ],
               ),
             ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Consumer<RestaurantProvider>(
-            builder: (context, provider, child) {
-              // When we have results or are loading, use Expanded to fill remaining space
-              if (provider.hasResults || provider.isLoading || provider.errorMessage != null) {
-                return Expanded(
-                  child: _buildResultsArea(context, provider),
-                );
-              }
-
-              // Empty state - no message, just empty space
-              return const SizedBox.shrink();
-            },
           ),
         ],
       ),

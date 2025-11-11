@@ -1,19 +1,22 @@
-// Web implementation using dart:html
-import 'dart:html' as html;
+// Web implementation using package:web
+import 'package:web/web.dart' as web;
 
 String? getItem(String key) {
-  return html.window.localStorage[key];
+  return web.window.localStorage.getItem(key);
 }
 
 void setItem(String key, String value) {
-  html.window.localStorage[key] = value;
+  web.window.localStorage.setItem(key, value);
 }
 
 List<String> getAllKeys() {
   final keys = <String>[];
-  for (var i = 0; i < html.window.localStorage.length; i++) {
-    final key = html.window.localStorage.keys.elementAt(i);
-    keys.add(key);
+  final localStorage = web.window.localStorage;
+  for (var i = 0; i < localStorage.length; i++) {
+    final key = localStorage.key(i);
+    if (key != null) {
+      keys.add(key);
+    }
   }
   return keys;
 }

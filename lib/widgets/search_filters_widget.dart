@@ -32,6 +32,7 @@ class _SearchFiltersWidgetState extends State<SearchFiltersWidget> {
     'french_restaurant',
     'greek_restaurant',
     'korean_restaurant',
+    'kosher_restaurant',
     'mediterranean_restaurant',
     'middle_eastern_restaurant',
     'pizza_restaurant',

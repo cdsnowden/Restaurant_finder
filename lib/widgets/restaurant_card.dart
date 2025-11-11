@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/restaurant.dart';
-import '../screens/visit_notes_screen.dart';
 import '../providers/restaurant_provider.dart';
 import '../providers/visits_provider.dart';
 
@@ -61,47 +60,138 @@ class RestaurantCard extends StatelessWidget {
     }
   }
 
+  Future<void> _openMaps(BuildContext context) async {
+    try {
+      String mapsUrl;
+
+      // Use lat/lng if available, otherwise use place ID or address
+      if (restaurant.latitude != null && restaurant.longitude != null) {
+        // Open Google Maps with coordinates and restaurant name
+        mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=${restaurant.latitude},${restaurant.longitude}&destination_place_id=${restaurant.placeId}';
+      } else if (restaurant.placeId.isNotEmpty) {
+        // Use place ID
+        mapsUrl = 'https://www.google.com/maps/search/?api=1&query=${Uri.encodeComponent(restaurant.name)}&query_place_id=${restaurant.placeId}';
+      } else {
+        // Fallback to address search
+        final query = Uri.encodeComponent('${restaurant.name}, ${restaurant.address}');
+        mapsUrl = 'https://www.google.com/maps/search/?api=1&query=$query';
+      }
+
+      final Uri url = Uri.parse(mapsUrl);
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening maps: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _chooseRestaurant(BuildContext context) async {
     try {
-      print('RestaurantCard: _chooseRestaurant called for ${restaurant.name}');
-
       final visitsProvider = Provider.of<VisitsProvider>(context, listen: false);
-      print('RestaurantCard: Got VisitsProvider');
 
       // Save immediately without notes
-      print('RestaurantCard: Calling saveRestaurantVisit...');
       final success = await visitsProvider.saveRestaurantVisit(
         restaurant: restaurant,
         visitDate: DateTime.now(),
       );
 
-      print('RestaurantCard: Save result = $success');
-
       if (context.mounted) {
         if (success) {
-          print('RestaurantCard: Showing success message');
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${restaurant.name} saved to My Visits!'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
+          // Show confirmation dialog with action options
+          showModalBottomSheet(
+            context: context,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            builder: (context) => Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    color: Colors.green,
+                    size: 64,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Restaurant Saved!',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${restaurant.name} has been added to My Visits',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'What would you like to do next?',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _openMaps(context);
+                    },
+                    icon: const Icon(Icons.map),
+                    label: const Text('Get Directions'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      backgroundColor: Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _openWebsite(context);
+                    },
+                    icon: const Icon(Icons.launch),
+                    label: const Text('Visit Website'),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      backgroundColor: Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Close confirmation modal
+                      Navigator.pop(context); // Close results modal
+                    },
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                    ),
+                    child: const Text('Close'),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           );
         } else {
-          print('RestaurantCard: Showing failure message');
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Failed to save visit'),
               backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
+              duration: Duration(seconds: 3),
             ),
           );
         }
       }
-    } catch (e, stackTrace) {
-      print('RestaurantCard ERROR: $e');
-      print('RestaurantCard Stack: $stackTrace');
-
+    } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -275,13 +365,45 @@ class RestaurantCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openMaps(context),
+                      icon: const Icon(Icons.map, size: 16),
+                      label: const Text('Get Directions'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _openWebsite(context),
-                    icon: const Icon(Icons.launch, size: 16),
-                    label: const Text('Visit Website'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openWebsite(context),
+                      icon: const Icon(Icons.launch, size: 16),
+                      label: const Text('Visit Website'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, size: 16),
+                      label: const Text('Close'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
                     ),
                   ),
                 ],

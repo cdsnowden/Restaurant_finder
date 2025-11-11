@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/restaurant.dart';
 import '../models/restaurant_visit.dart';
@@ -44,22 +43,15 @@ class _VisitNotesScreenState extends State<VisitNotesScreen> {
   }
 
   Future<void> _saveVisit() async {
-    print('===== VisitNotesScreen._saveVisit START =====');
     setState(() {
       _isLoading = true;
     });
 
     try {
-      print('Getting VisitsProvider...');
       final visitsProvider = Provider.of<VisitsProvider>(context, listen: false);
-      print('VisitsProvider obtained');
 
       bool success;
       if (widget.existingVisit != null) {
-        print('MODE: Updating existing visit');
-        print('Existing visit ID: ${widget.existingVisit!.id}');
-        print('Restaurant: ${widget.restaurant.name}');
-
         // Update existing visit
         final updatedVisit = RestaurantVisit(
           id: widget.existingVisit!.id,
@@ -75,17 +67,9 @@ class _VisitNotesScreenState extends State<VisitNotesScreen> {
               : _notesController.text.trim(),
         );
 
-        print('Updated visit object created');
-        print('Order notes: ${updatedVisit.orderNotes}');
-        print('User rating: ${updatedVisit.userRating}');
-        print('User review: ${updatedVisit.userReview}');
-        print('Calling updateRestaurantVisit...');
-
         success = await visitsProvider.updateRestaurantVisit(updatedVisit);
-        print('updateRestaurantVisit returned: $success');
       } else {
         // Create new visit
-        print('MODE: Creating new visit for ${widget.restaurant.name}');
         success = await visitsProvider.saveRestaurantVisit(
           restaurant: widget.restaurant,
           visitDate: DateTime.now(),
@@ -97,13 +81,9 @@ class _VisitNotesScreenState extends State<VisitNotesScreen> {
               ? null
               : _notesController.text.trim(),
         );
-        print('saveRestaurantVisit returned: $success');
       }
 
-      print('Final success status: $success');
-
       if (mounted && success) {
-        print('Showing success message and popping navigation');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -115,9 +95,7 @@ class _VisitNotesScreenState extends State<VisitNotesScreen> {
           ),
         );
         Navigator.of(context).pop(true);
-        print('Navigation popped');
       } else if (mounted) {
-        print('Showing failure message');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to save visit'),
@@ -125,13 +103,7 @@ class _VisitNotesScreenState extends State<VisitNotesScreen> {
           ),
         );
       }
-
-      print('===== VisitNotesScreen._saveVisit END (success=$success) =====');
-    } catch (e, stackTrace) {
-      print('===== VisitNotesScreen._saveVisit ERROR =====');
-      print('Error: $e');
-      print('Stack trace: $stackTrace');
-
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

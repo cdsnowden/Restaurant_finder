@@ -13,12 +13,18 @@ class RestaurantProvider with ChangeNotifier {
   String? _errorMessage;
   SearchFilters? _currentFilters;
   final Set<String> _removedRestaurantIds = {}; // Track removed restaurants
+  double? _searchCenterLat;
+  double? _searchCenterLng;
+  String? _nextPageToken; // For pagination
+  bool _isLoadingMore = false; // For "Load More" loading state
 
   List<Restaurant> get restaurants => _filteredRestaurants;
   bool get isLoading => _isLoading;
+  bool get isLoadingMore => _isLoadingMore;
   String? get errorMessage => _errorMessage;
   SearchFilters? get currentFilters => _currentFilters;
   bool get hasResults => _filteredRestaurants.isNotEmpty;
+  bool get hasMoreResults => _nextPageToken != null;
 
   bool isRestaurantRemoved(String placeId) => _removedRestaurantIds.contains(placeId);
 
@@ -36,9 +42,19 @@ class RestaurantProvider with ChangeNotifier {
       _setLoading(true);
       _clearError();
       _currentFilters = filters;
+      _nextPageToken = null; // Reset pagination
 
-      _restaurants = await _placesService.searchRestaurants(filters);
+      // Get search center coordinates for distance sorting
+      final location = await _placesService.getLocationFromFilters(filters);
+      if (location != null) {
+        _searchCenterLat = location['lat'];
+        _searchCenterLng = location['lng'];
+      }
+
+      final result = await _placesService.searchRestaurants(filters);
+      _restaurants = result.restaurants;
       _filteredRestaurants = List.from(_restaurants);
+      _nextPageToken = result.nextPageToken;
 
       if (_restaurants.isEmpty) {
         _setError('No restaurants found for the specified criteria.');
@@ -47,8 +63,36 @@ class RestaurantProvider with ChangeNotifier {
       _setError('Failed to search restaurants: ${e.toString()}');
       _restaurants = [];
       _filteredRestaurants = [];
+      _nextPageToken = null;
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<void> loadMoreRestaurants() async {
+    if (_nextPageToken == null || _currentFilters == null || _isLoadingMore) {
+      return; // No more results to load or already loading
+    }
+
+    try {
+      _isLoadingMore = true;
+      notifyListeners();
+
+      final result = await _placesService.searchRestaurants(
+        _currentFilters!,
+        pageToken: _nextPageToken,
+      );
+
+      // Append new restaurants to existing list
+      _restaurants.addAll(result.restaurants);
+      _filteredRestaurants = List.from(_restaurants);
+      _nextPageToken = result.nextPageToken;
+
+    } catch (e) {
+      _setError('Failed to load more restaurants: ${e.toString()}');
+    } finally {
+      _isLoadingMore = false;
+      notifyListeners();
     }
   }
 
@@ -157,6 +201,33 @@ class RestaurantProvider with ChangeNotifier {
           return bPrice.compareTo(aPrice);
         });
         break;
+      case RestaurantSortOption.distance:
+        if (_searchCenterLat != null && _searchCenterLng != null) {
+          _filteredRestaurants.sort((a, b) {
+            // Calculate distance for restaurant a
+            final aDistance = (a.latitude != null && a.longitude != null)
+                ? _placesService.calculateDistance(
+                    _searchCenterLat!,
+                    _searchCenterLng!,
+                    a.latitude!,
+                    a.longitude!,
+                  )
+                : double.infinity;
+
+            // Calculate distance for restaurant b
+            final bDistance = (b.latitude != null && b.longitude != null)
+                ? _placesService.calculateDistance(
+                    _searchCenterLat!,
+                    _searchCenterLng!,
+                    b.latitude!,
+                    b.longitude!,
+                  )
+                : double.infinity;
+
+            return aDistance.compareTo(bDistance);
+          });
+        }
+        break;
     }
     notifyListeners();
   }
@@ -165,7 +236,7 @@ class RestaurantProvider with ChangeNotifier {
     try {
       return await _placesService.getRestaurantDetails(placeId);
     } catch (e) {
-      print('Error getting restaurant details: $e');
+      // Error getting restaurant details
       return null;
     }
   }
@@ -186,6 +257,7 @@ class RestaurantProvider with ChangeNotifier {
     _restaurants = [];
     _filteredRestaurants = [];
     _currentFilters = null;
+    _nextPageToken = null;
     _removedRestaurantIds.clear(); // Clear removed restaurants when clearing results
     _clearError();
     notifyListeners();
@@ -216,4 +288,5 @@ enum RestaurantSortOption {
   name,
   priceAscending,
   priceDescending,
+  distance,
 }

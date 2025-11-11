@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/restaurant_visit.dart';
 
 class VisitCard extends StatelessWidget {
@@ -12,6 +13,26 @@ class VisitCard extends StatelessWidget {
     this.onTap,
     this.onDelete,
   });
+
+  Future<void> _leaveGoogleReview(BuildContext context) async {
+    try {
+      // Construct Google review URL using place ID
+      final placeId = visit.restaurant.placeId;
+      final reviewUrl = 'https://search.google.com/local/writereview?placeid=$placeId';
+
+      final Uri url = Uri.parse(reviewUrl);
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening Google Reviews: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -166,6 +187,15 @@ class VisitCard extends StatelessWidget {
                   ),
                 ),
               ],
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () => _leaveGoogleReview(context),
+                icon: const Icon(Icons.rate_review, size: 16),
+                label: const Text('Leave Google Review'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                ),
+              ),
             ],
           ),
         ),

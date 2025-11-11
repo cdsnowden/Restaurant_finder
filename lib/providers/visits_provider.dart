@@ -22,10 +22,8 @@ class VisitsProvider with ChangeNotifier {
 
     try {
       _visits = await _visitService.getVisits();
-      print('Loaded ${_visits.length} visits from storage');
       notifyListeners();
     } catch (e) {
-      print('Error loading visits: $e');
       _setError('Failed to load visits: ${e.toString()}');
     } finally {
       _setLoading(false);
@@ -44,8 +42,6 @@ class VisitsProvider with ChangeNotifier {
       _setLoading(true);
       _clearError();
 
-      print('VisitsProvider: Creating new visit for ${restaurant.name}');
-
       final visit = RestaurantVisit(
         id: _uuid.v4(),
         userId: 'local_user',
@@ -57,22 +53,15 @@ class VisitsProvider with ChangeNotifier {
         photosUrls: photosUrls ?? [],
       );
 
-      print('VisitsProvider: Visit object created with ID: ${visit.id}');
-
       // Save to localStorage
-      print('VisitsProvider: Calling _visitService.saveVisit()...');
       await _visitService.saveVisit(visit);
-      print('VisitsProvider: Visit saved successfully: ${visit.restaurant.name}');
 
       // Update local memory
       _visits.insert(0, visit);
-      print('VisitsProvider: Added to local memory, total visits: ${_visits.length}');
 
       notifyListeners();
       return true;
-    } catch (e, stackTrace) {
-      print('VisitsProvider ERROR: $e');
-      print('VisitsProvider Stack trace: $stackTrace');
+    } catch (e) {
       _setError('Failed to save visit: ${e.toString()}');
       return false;
     } finally {
@@ -84,31 +73,23 @@ class VisitsProvider with ChangeNotifier {
     try {
       _clearError();
 
-      print('VisitsProvider: Updating visit ${visit.id} for ${visit.restaurant.name}');
-      print('VisitsProvider: Current visits in memory: ${_visits.length}');
-
       // Save to localStorage
       await _visitService.saveVisit(visit);
 
       // Update local memory
       final index = _visits.indexWhere((v) => v.id == visit.id);
-      print('VisitsProvider: Found visit at index: $index');
 
       if (index != -1) {
         _visits[index] = visit;
-        print('VisitsProvider: Updated visit in memory at index $index');
       } else {
         // If not found, add it (shouldn't happen but just in case)
         _visits.insert(0, visit);
-        print('VisitsProvider: Visit not found in memory, added as new');
       }
 
       notifyListeners();
-      print('VisitsProvider: Update complete, total visits: ${_visits.length}');
 
       return true;
     } catch (e) {
-      print('VisitsProvider: ERROR updating visit: $e');
       _setError('Failed to update visit: ${e.toString()}');
       return false;
     }
