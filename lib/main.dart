@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import 'providers/restaurant_provider.dart';
 import 'providers/visits_provider.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/search_type_selection_screen.dart';
+import 'screens/search_details_screen.dart';
+import 'screens/search_results_screen.dart';
+import 'models/search_filters.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +47,24 @@ class MyApp extends StatelessWidget {
         ),
         home: const HomeScreen(),
         debugShowCheckedModeBanner: false,
+        routes: {
+          '/search-type-selection': (context) => const SearchTypeSelectionScreen(),
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == '/search-filters') {
+            final searchType = settings.arguments as SearchType;
+            return MaterialPageRoute(
+              builder: (context) => SearchDetailsScreen(searchType: searchType),
+            );
+          }
+          if (settings.name == '/search-results') {
+            final filters = settings.arguments as SearchFilters;
+            return MaterialPageRoute(
+              builder: (context) => SearchResultsScreen(filters: filters),
+            );
+          }
+          return null;
+        },
       ),
     );
   }

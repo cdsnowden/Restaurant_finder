@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/restaurant.dart';
+import '../models/restaurant_with_route_info.dart';
 import '../models/search_filters.dart';
 import '../services/places_service.dart';
 
@@ -9,6 +10,7 @@ class RestaurantProvider with ChangeNotifier {
 
   List<Restaurant> _restaurants = [];
   List<Restaurant> _filteredRestaurants = [];
+  List<RestaurantWithRouteInfo> _routeRestaurants = []; // For route-based searches
   bool _isLoading = false;
   String? _errorMessage;
   SearchFilters? _currentFilters;
@@ -19,11 +21,12 @@ class RestaurantProvider with ChangeNotifier {
   bool _isLoadingMore = false; // For "Load More" loading state
 
   List<Restaurant> get restaurants => _filteredRestaurants;
+  List<RestaurantWithRouteInfo> get routeRestaurants => _routeRestaurants;
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   String? get errorMessage => _errorMessage;
   SearchFilters? get currentFilters => _currentFilters;
-  bool get hasResults => _filteredRestaurants.isNotEmpty;
+  bool get hasResults => _filteredRestaurants.isNotEmpty || _routeRestaurants.isNotEmpty;
   bool get hasMoreResults => _nextPageToken != null;
 
   bool isRestaurantRemoved(String placeId) => _removedRestaurantIds.contains(placeId);
@@ -38,12 +41,16 @@ class RestaurantProvider with ChangeNotifier {
   }
 
   Future<void> searchRestaurants(SearchFilters filters) async {
-    try {
-      _setLoading(true);
-      _clearError();
-      _currentFilters = filters;
-      _nextPageToken = null; // Reset pagination
+    _isLoading = true;
+    _errorMessage = null;
+    _currentFilters = filters;
+    _nextPageToken = null; // Reset pagination
 
+    // Defer the notification to avoid setState during build
+    await Future.microtask(() {});
+    notifyListeners();
+
+    try {
       // Get search center coordinates for distance sorting
       final location = await _placesService.getLocationFromFilters(filters);
       if (location != null) {
@@ -57,15 +64,69 @@ class RestaurantProvider with ChangeNotifier {
       _nextPageToken = result.nextPageToken;
 
       if (_restaurants.isEmpty) {
-        _setError('No restaurants found for the specified criteria.');
+        _errorMessage = 'No restaurants found for the specified criteria.';
       }
     } catch (e) {
-      _setError('Failed to search restaurants: ${e.toString()}');
+      _errorMessage = 'Failed to search restaurants: ${e.toString()}';
       _restaurants = [];
       _filteredRestaurants = [];
       _nextPageToken = null;
     } finally {
-      _setLoading(false);
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> searchRestaurantsAlongRoute(SearchFilters filters) async {
+    _isLoading = true;
+    _errorMessage = null;
+    _currentFilters = filters;
+    _routeRestaurants = [];
+
+    // Defer the notification to avoid setState during build
+    await Future.microtask(() {});
+    notifyListeners();
+
+    try {
+      final results = await _placesService.searchRestaurantsAlongRoute(filters);
+      _routeRestaurants = results;
+
+      if (_routeRestaurants.isEmpty) {
+        _errorMessage = 'No restaurants found along your route.';
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to search restaurants along route: ${e.toString()}';
+      _routeRestaurants = [];
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMoreRestaurants() async {
+    if (_nextPageToken == null || _currentFilters == null || _isLoadingMore) {
+      return; // No more results to load or already loading
+    }
+
+    try {
+      _isLoadingMore = true;
+      notifyListeners();
+
+      final result = await _placesService.searchRestaurants(
+        _currentFilters!,
+        pageToken: _nextPageToken,
+      );
+
+      // Append new restaurants to existing list
+      _restaurants.addAll(result.restaurants);
+      _filteredRestaurants = List.from(_restaurants);
+      _nextPageToken = result.nextPageToken;
+
+    } catch (e) {
+      _setError('Failed to load more restaurants: ${e.toString()}');
+    } finally {
+      _isLoadingMore = false;
+      notifyListeners();
     }
   }
 
@@ -175,8 +236,28 @@ class RestaurantProvider with ChangeNotifier {
     }
   }
 
-  void sortRestaurants(RestaurantSortOption sortOption) {
+  void sortRestaurants(String sortOption) {
+    RestaurantSortOption option;
     switch (sortOption) {
+      case 'rating':
+        option = RestaurantSortOption.rating;
+        break;
+      case 'name':
+        option = RestaurantSortOption.name;
+        break;
+      case 'price_low':
+        option = RestaurantSortOption.priceAscending;
+        break;
+      case 'price_high':
+        option = RestaurantSortOption.priceDescending;
+        break;
+      case 'distance':
+      default:
+        option = RestaurantSortOption.distance;
+        break;
+    }
+
+    switch (option) {
       case RestaurantSortOption.rating:
         _filteredRestaurants.sort((a, b) {
           final aRating = a.rating ?? 0;
@@ -256,6 +337,7 @@ class RestaurantProvider with ChangeNotifier {
   void clearResults() {
     _restaurants = [];
     _filteredRestaurants = [];
+    _routeRestaurants = [];
     _currentFilters = null;
     _nextPageToken = null;
     _removedRestaurantIds.clear(); // Clear removed restaurants when clearing results

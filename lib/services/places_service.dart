@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../models/restaurant.dart';
 import '../models/search_filters.dart';
+import '../models/restaurant_with_route_info.dart';
+import 'directions_service.dart';
 
 // Search result class to handle pagination
 class SearchResult {
@@ -111,6 +113,132 @@ class PlacesService {
       );
     } catch (e) {
       throw Exception('Failed to search restaurants: $e');
+    }
+  }
+
+  /// Search for restaurants along a route
+  Future<List<RestaurantWithRouteInfo>> searchRestaurantsAlongRoute(
+    SearchFilters filters,
+  ) async {
+    try {
+      if (filters.originLat == null || filters.originLng == null) {
+        throw Exception('Origin location is required for route search');
+      }
+
+      final directionsService = DirectionsService();
+
+      // Get the route
+      final route = await directionsService.getRoute(
+        filters.originLat!,
+        filters.originLng!,
+        filters.destinationAddress,
+      );
+
+      if (route == null) {
+        throw Exception('Could not calculate route. Please check your destination.');
+      }
+
+      // Sample points along the route (every 3 miles / 5,000 meters)
+      final sampledPoints = directionsService.sampleRoutePoints(
+        route.points,
+        5000, // 3 miles in meters
+      );
+
+      final maxDetourMeters = filters.maxDetourMiles * 1609.34;
+      final List<Restaurant> allRestaurants = [];
+      final seenPlaceIds = <String>{};
+
+      // Use a fixed search radius of 10 miles (16000 meters) around each sample point
+      // We'll filter by actual detour distance afterwards
+      const searchRadiusMeters = 16000; // ~10 miles
+
+      // Search around each sampled point
+      for (final point in sampledPoints) {
+        final locationString = '${point.lat},${point.lng}';
+
+        Map<String, dynamic> searchResult;
+
+        // Use cuisine search if cuisines are specified, otherwise nearby search
+        if (filters.cuisineTypes.isNotEmpty) {
+          for (final cuisine in filters.cuisineTypes) {
+            searchResult = await _searchByCuisine(
+              cuisine,
+              locationString,
+              searchRadiusMeters,
+              filters.openNow,
+              filters.priceRanges,
+            );
+            final restaurants = searchResult['restaurants'] as List<Restaurant>;
+
+            for (final restaurant in restaurants) {
+              if (!seenPlaceIds.contains(restaurant.placeId)) {
+                allRestaurants.add(restaurant);
+                seenPlaceIds.add(restaurant.placeId);
+              }
+            }
+          }
+        } else {
+          searchResult = await _searchNearby(
+            locationString,
+            searchRadiusMeters,
+            filters.openNow,
+            filters.priceRanges,
+          );
+          final restaurants = searchResult['restaurants'] as List<Restaurant>;
+
+          for (final restaurant in restaurants) {
+            if (!seenPlaceIds.contains(restaurant.placeId)) {
+              allRestaurants.add(restaurant);
+              seenPlaceIds.add(restaurant.placeId);
+            }
+          }
+        }
+      }
+
+      // Filter and add route info to each restaurant
+      final List<RestaurantWithRouteInfo> restaurantsWithRouteInfo = [];
+
+      for (final restaurant in allRestaurants) {
+        if (restaurant.latitude == null || restaurant.longitude == null) continue;
+
+        // Calculate distance from route
+        final distanceFromRoute = directionsService.distanceFromRoute(
+          restaurant.latitude!,
+          restaurant.longitude!,
+          route.points,
+        );
+
+        // Filter by max detour
+        if (distanceFromRoute > maxDetourMeters) continue;
+
+        // Filter by rating if specified
+        if (filters.minRating > 0 && (restaurant.rating ?? 0) < filters.minRating) {
+          continue;
+        }
+
+        // Calculate position along route
+        final position = directionsService.getPositionAlongRoute(
+          restaurant.latitude!,
+          restaurant.longitude!,
+          route.points,
+        );
+
+        final distanceAlongRoute = position * route.distanceMeters;
+
+        restaurantsWithRouteInfo.add(RestaurantWithRouteInfo(
+          restaurant: restaurant,
+          distanceFromRouteMeters: distanceFromRoute,
+          positionAlongRoute: position,
+          distanceAlongRouteMeters: distanceAlongRoute,
+        ));
+      }
+
+      // Sort by position along route
+      restaurantsWithRouteInfo.sort((a, b) => a.positionAlongRoute.compareTo(b.positionAlongRoute));
+
+      return restaurantsWithRouteInfo;
+    } catch (e) {
+      throw Exception('Failed to search restaurants along route: $e');
     }
   }
 

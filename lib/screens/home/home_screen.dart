@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:in_app_update/in_app_update.dart';
 import '../../providers/visits_provider.dart';
-import 'search_screen.dart';
+import '../search_type_selection_screen.dart';
 import '../visits/visits_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,7 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _screens = [
-    const SearchScreen(),
+    const SearchTypeSelectionScreen(),
     const VisitsScreen(),
   ];
 

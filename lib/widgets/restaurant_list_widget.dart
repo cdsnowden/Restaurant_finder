@@ -130,7 +130,28 @@ class _RestaurantListWidgetState extends State<RestaurantListWidget> {
     setState(() {
       _sortOption = option;
     });
-    Provider.of<RestaurantProvider>(context, listen: false).sortRestaurants(option);
+
+    String sortString;
+    switch (option) {
+      case RestaurantSortOption.rating:
+        sortString = 'rating';
+        break;
+      case RestaurantSortOption.name:
+        sortString = 'name';
+        break;
+      case RestaurantSortOption.priceAscending:
+        sortString = 'price_low';
+        break;
+      case RestaurantSortOption.priceDescending:
+        sortString = 'price_high';
+        break;
+      case RestaurantSortOption.distance:
+      default:
+        sortString = 'distance';
+        break;
+    }
+
+    Provider.of<RestaurantProvider>(context, listen: false).sortRestaurants(sortString);
   }
 
   String _getSortOptionText(RestaurantSortOption option) {
