@@ -111,12 +111,13 @@ flutter doctor
 ---
 
 ## Current Version
-**Version: 1.0.34 (Build 46)**
+**Version: 1.0.35 (Build 47)**
 
 Includes:
-- App Store compliance fixes
+- App Store compliance fixes (Privacy Policy, Support URL, no iPad)
 - Get Directions button fix
 - Routes API v2 update for route search
+- Custom app icon (same as Android - fixes "generic flutter icon" rejection)
 
 ## Privacy Policy Location
 https://github.com/cdsnowden/Restaurant_finder/blob/main/PRIVACY_POLICY.md
